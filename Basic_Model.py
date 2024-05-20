@@ -10,6 +10,8 @@ import sympy as sym
 import pandas as pd
 from scipy.io import loadmat
 import scipy as scipy
+import plotly.express as px
+import plotly.graph_objects as go
 
 I1 = 0.025
 I2 = 0.045
@@ -33,13 +35,13 @@ np.random.seed(0)
 Bruit = True
 
 
-def Bruitage(Bruit,NbreVar):
+def Bruitage(Bruit,NbreVar,Var):
 
     if Bruit :
         Omega_sens = np.diag(np.concatenate((np.ones(int(NbreVar/2)),np.zeros(int(NbreVar/2)))))
-        motor_noise = np.concatenate((np.random.normal(0,0.000001,int(NbreVar/2)),np.zeros(int(NbreVar/2)))).T
-        Omega_measure = np.diag(np.ones(NbreVar)*10**-12)
-        measure_noise = np.concatenate((np.random.normal(0,0.000001,int(NbreVar/2)),np.zeros(int(NbreVar/2)))).T
+        motor_noise = np.concatenate((np.random.normal(0,np.sqrt(Var),int(NbreVar/2)),np.zeros(int(NbreVar/2)))).T
+        Omega_measure = np.diag(np.ones(NbreVar)*Var)
+        measure_noise = np.concatenate((np.random.normal(0,np.sqrt(Var),int(NbreVar/2)),np.zeros(int(NbreVar/2)))).T
 
     else:
         Omega_sens = np.zeros(NbreVar).T

@@ -1,4 +1,3 @@
-import numpy as np
 from Basic_Model import *
 from Newton import *
 
@@ -186,7 +185,7 @@ def Simulation_FF(w1,w2,w3,w4,wt,r1,r2,alpha = 1,targets = [0,55],starting_point
 
     return X,Y
 
-def Simulation_FF_Linear(w1,w2,w3,w4,r1,r2,targets = [0,55],starting_point = [0,30],proportionnality = 0):
+def Simulation_FF_Linear(w1,w2,w3,w4,r1,r2,targets = [0,55],starting_point = [0,20],proportionnality = 0,pert = 0):
 
     Num_iter = 600
     dt = 0.001
@@ -254,7 +253,9 @@ def Simulation_FF_Linear(w1,w2,w3,w4,r1,r2,targets = [0,55],starting_point = [0,
     F = np.zeros(2)
     for k in range(Num_iter-1):
         acc = np.array([(reelx[2]-array_reelx[k-1][2])/dt,(reelx[3]-array_reelx[k-1][3])/dt])
-        F =Compute_f_new_version(reelx[0:2],reelx[2:4],acc,proportionnality)
+        if pert == 0:
+            F =Compute_f_new_version(reelx[0:2],reelx[2:4],acc,proportionnality)
+        else: F = 0
         
 
         x[0],x[1],x[3],x[4] = reelx[0],reelx[2],reelx[1],reelx[3]        
