@@ -47,26 +47,28 @@ def Compute_f_new_version(theta,omega,acc,factor):
     return np.array([F1,F2])
 
 
-def Simulation_FF(w1,w2,w3,w4,wt,r1,r2,alpha = 1,targets = [0,55],starting_point = [0,30],proportionnality = 0,plot = True,pert = 0):
+def Feedback_Linearization_with_FF(w1,w2,w3,w4,r1,r2,targets = [0,55],starting_point = [0,30],plot = True,Noise_Variance = 1e-6,DisplayNonlinear = True,proportionnality = 0,pert = 0,alpha = 1):
 
     Num_iter = 600
     dt = 0.001
-    LOAD_ACTIVATION = 0
+    LOAD_ACTIVATION = True
+
     st1,st2 = newton(f,df,1e-8,1000,starting_point[0],starting_point[1])
-    obj1,obj2 = newton(f,df,1e-8,1000,targets[0]-1,targets[1])
+    obj1,obj2 = newton(f,df,1e-8,1000,0,targets[1])
     obj3,obj4 = newton(f,df,1e-8,1000,targets[0],targets[1])
 
+
     xstart = np.array([st1,0,0,st2,0,0,obj1,0,obj2,0])
-    x0 = np.array([st1,0,0,st2,0,0,obj1,0,obj2,0])
-    xnonlin0 = np.concatenate((x0[:7],np.array([x0[8]])))
+    x0 = np.array([st1,0,0,st2,0,0,obj1,obj2])
+
     Bruit = True
     NbreVar = 8
     
     #Define Weight Matrices
-    Rnonlin = np.array([[r1,0],[0,r2]])
-    Q = np.array([[wt/2+w1,0,0,-2*wt,0,0,wt-w1,0],[0,w3,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],
-               [-2*wt,0,0,2*wt+w2,0,0,-wt,-w2],[0,0,0,0,w4,0,0,0],[0,0,0,0,0,0,0,0],
-               [wt-w1,0,0,-wt,0,0,w1+wt,0],[0,0,0,-w2,0,0,0,w2]])
+    R = np.array([[r1,0],[0,r2]])
+    Q = np.array([[w1,0,0,0,0,0,-w1,0],[0,w3,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],
+               [0,0,0,w2,0,0,0,-w2],[0,0,0,0,w4,0,0,0],[0,0,0,0,0,0,0,0],
+               [0-w1,0,0,0,0,0,w1,0],[0,0,0,-w2,0,0,0,w2]])
     #Q = np.array([[2*w1/5+w1,0,0,-2*w1/5,0,0,w1/5-w1,0],[0,w3,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],
     #            [-2*w1/5,0,0,2*w2/5+w2,0,0,-w2/5,-w2],[0,0,0,0,w4,0,0,0],[0,0,0,0,0,0,0,0],
      #           [w1/5-w1,0,0,-w2/5,0,0,w1+w1/5,0],[0,0,0,-w2,0,0,0,w2]])
@@ -74,8 +76,8 @@ def Simulation_FF(w1,w2,w3,w4,wt,r1,r2,alpha = 1,targets = [0,55],starting_point
     
     
     #Define Dynamic Matrices  
-    Az = np.array([[1,dt,0,0,0,0,0,0],[0,1,dt,0,0,0,0,0],[0,0,1,0,0,0,0,0],[0,0,0,1,dt,0,0,0],[0,0,0,0,1,dt,0,0],[0,0,0,0,0,1,0,0],[0,0,0,0,0,0,1,0],[0,0,0,0,0,0,0,1]])
-    Bz = np.array([[0,0],[0,0],[dt,0],[0,0],[0,0],[0,dt],[0,0],[0,0]])
+    A = np.array([[1,dt,0,0,0,0,0,0],[0,1,dt,0,0,0,0,0],[0,0,1,0,0,0,0,0],[0,0,0,1,dt,0,0,0],[0,0,0,0,1,dt,0,0],[0,0,0,0,0,1,0,0],[0,0,0,0,0,0,1,0],[0,0,0,0,0,0,0,1]])
+    B = np.array([[0,0],[0,0],[dt,0],[0,0],[0,0],[0,dt],[0,0],[0,0]])
     
     
     #Reverse Iterations
@@ -87,14 +89,14 @@ def Simulation_FF(w1,w2,w3,w4,wt,r1,r2,alpha = 1,targets = [0,55],starting_point
     array_S = np.zeros((Num_iter,NbreVar,NbreVar)) 
     array_S[-1] = Qnonlin
     for k in range(Num_iter-1):
-        L = np.linalg.inv(Rnonlin+Bz.T@S@Bz)@Bz.T@S@Az
+        L = np.linalg.inv(R+B.T@S@B)@B.T@S@A
         array_L[Num_iter-2-k] = L
-        S = Az.T@S@(Az-Bz@L)
+        S = A.T@S@(A-B@L)
         array_S[Num_iter-2-k] = S
         
     #print(array_L[0])
     #Feedback
-    H,L,x0,A,B = np.identity(8),array_L,xnonlin0,Az,Bz
+    H,L = np.identity(8),array_L
         
     array_x = np.zeros((Num_iter,NbreVar))
     array_xhat = np.zeros((Num_iter,NbreVar))
@@ -103,89 +105,137 @@ def Simulation_FF(w1,w2,w3,w4,wt,r1,r2,alpha = 1,targets = [0,55],starting_point
 
     array_x[0] = x0.flatten()
     array_xhat[0] = x0.flatten()
-    xhat = x0
-    x = x0
+    xhat = np.copy(x0)
+    x = np.copy(x0)
+    x_changevar = np.copy(x0)
+    x_internalmodel = np.copy(x0)
+
     reelx = np.zeros(NbreVar-2)
-    reelx[0] = x[0]
-    reelx[1] = x[3]
-    new_reelx = reelx
+    reelx[0],reelx[1] = x[0],x[3]
+
+    new_reelx = np.copy(reelx)
+
+
+    Command_Array = np.zeros((Num_iter-1,2,2))
     sigma = np.identity(NbreVar)*10**-6 #Espérance de (erreur erreur^) avec erreur = x - xhat
-    F = np.zeros(2)
-    OldF = np.zeros(2)
+    v = np.zeros(2)
+    OldF = 0
     for k in range(Num_iter-1):
-        #F = 0.1*Compute_F(reelx[0:2],reelx[2:4])
+
         acc = np.array([(reelx[2]-array_reelx[k-1][2])/dt,(reelx[3]-array_reelx[k-1][3])/dt])
         if np.sin(reelx[0]+reelx[1])*33+np.sin(reelx[0])*30 > pert:
 
-            if LOAD_ACTIVATION == 0:
-                x[6:8] = np.array([obj3,obj4])
-                xhat[6:8] = np.array([obj3,obj4])
-                X = np.cos(reelx[0]+reelx[1])*33+np.cos(reelx[0])*30
-                Y = np.sin(reelx[0]+reelx[1])*33+np.sin(reelx[0])*30
-                LOAD_ACTIVATION = 1
-                if plot : 
+            if LOAD_ACTIVATION :
+                if plot :
+                    X = np.cos(reelx[0]+reelx[1])*33+np.cos(reelx[0])*30
+                    Y = np.sin(reelx[0]+reelx[1])*33+np.sin(reelx[0])*30
                     plt.scatter(X,Y,color = "red")
+                x[6:8] = [obj3,obj4]
+                xhat[6:8] = [obj3,obj4]
+                x_changevar[6:8] = [obj3,obj4]
+                x_internalmodel[6:8] = [obj3,obj4]
+                LOAD_ACTIVATION = False
+                
             F = Compute_f_new_version(reelx[0:2],reelx[2:4],acc,proportionnality)
             Fdot = (F-OldF)/dt
             OldF = F
         else : 
             F = 0
             Fdot = 0
-        
-
-        x[0],x[1],x[3],x[4] = reelx[0],reelx[2],reelx[1],reelx[3]        
-        Omega_sens,motor_noise,Omega_measure,measure_noise = Bruitage(Bruit,NbreVar)
-        y[k] = (H@x+measure_noise).flatten()
-        K = A@sigma@H.T@np.linalg.inv(H@sigma@H.T+Omega_measure)
-        sigma = Omega_sens + (A - K@H)@sigma@A.T
-        xhat = A@xhat - B@L[k].reshape(np.flip(B.shape))@xhat + K@(y[k]-H@xhat)
-        x = A@x-B@L[k].reshape(np.flip(B.shape))@xhat+motor_noise
+        #x[2] += dt*v[0]*0.1
+        #x[5]+= dt*v[1]*0.1
+        #x_internalmodel[2] += dt*v[0]*0.1
+        #x_internalmodel[5]+= dt*v[1]*0.1
         v = -L[k].reshape(np.flip(B.shape))@xhat
+        #x = A@x-B@L[k].reshape(np.flip(B.shape))@xhat+motor_noise
+        
             
         C = np.array([-reelx[3]*(2*reelx[2]+reelx[3])*a2*np.sin(reelx[1]),reelx[2]*reelx[2]*a2*np.sin(reelx[1])])
         Denominator = a3*(a1-a3)-a2*a2*np.cos(reelx[1])*np.cos(reelx[1])
         Minv = np.array([[a3/Denominator,(-a2*np.cos(reelx[1])-a3)/Denominator],[(-a2*np.cos(reelx[1])-a3)/Denominator,(2*a2*np.cos(reelx[1])+a1)/Denominator]])
-        new_reelx[0:2] += dt*reelx[2:4]
-        new_reelx[2:4] += dt*(Minv@(reelx[4:6]-Bdyn@(reelx[2:4])-C)+F)  
-        M = np.array([[a1+2*a2*cos(reelx[1]),a3+a2*cos(reelx[1])],[a3+a2*cos(reelx[1]),a3]])
-        Minvdot = np.array([[-a3*a2*a2*sin(2*reelx[1])*reelx[3]/(Denominator*Denominator),
-                             (a2*sin(reelx[1])*reelx[3]*Denominator+(a2*cos(reelx[1])+a3)*a2*a2*sin(2*reelx[1])*reelx[3])/(Denominator*Denominator)],
-                            [(a2*sin(reelx[1])*reelx[3]*Denominator+(a2*cos(reelx[1])+a3)*a2*a2*sin(2*reelx[1])*reelx[3])/(Denominator*Denominator),
-                            (-2*a2*sin(reelx[1])*reelx[3]*Denominator+(2*a2*cos(reelx[1])+a1)*a2*a2*sin(2*reelx[1])*reelx[3])/(Denominator*Denominator)]])
-            
-        Cdot = np.array([-a2*x[5]*(2*x[1]+x[4])*sin(x[3])-a2*x[4]*(2*x[2]+x[5])*sin(x[3])
-                         -a2*x[4]*x[4]*(2*x[1]+x[4])*cos(x[3]),2*x[1]*x[2]*a2*sin(x[3])+x[1]*x[1]*a2*cos(x[3])*x[4]])
-        K = 1/0.06
         
+        Denominator = a3*(a1-a3)-a2*a2*np.cos(xhat[3])*np.cos(xhat[3])
+        M = np.array([[a1+2*a2*cos(xhat[3]),a3+a2*cos(xhat[3])],[a3+a2*cos(xhat[3]),a3]])
+        Minvdot = np.array([[-a3*a2*a2*sin(2*xhat[3])*xhat[4]/(Denominator*Denominator),
+                             (a2*sin(xhat[3])*xhat[4]*Denominator+(a2*cos(xhat[3])+a3)*a2*a2*sin(2*xhat[3])*xhat[4])/(Denominator*Denominator)],
+                            [(a2*sin(xhat[3])*xhat[4]*Denominator+(a2*cos(xhat[3])+a3)*a2*a2*sin(2*xhat[3])*xhat[4])/(Denominator*Denominator),
+                            (-2*a2*sin(x[3])*xhat[4]*Denominator+(2*a2*cos(xhat[3])+a1)*a2*a2*sin(2*xhat[3])*xhat[4])/(Denominator*Denominator)]])
+            
+        Cdot = np.array([-a2*xhat[5]*(2*xhat[1]+xhat[4])*sin(xhat[3])-a2*xhat[4]*(2*xhat[2]+xhat[5])*sin(xhat[3])
+                         -a2*xhat[4]*xhat[4]*(2*xhat[1]+xhat[4])*cos(xhat[3]),2*xhat[1]*xhat[2]*a2*sin(xhat[3])+xhat[1]*xhat[1]*a2*cos(xhat[3])*xhat[4]])
+        K = 1/0.06
+
         if alpha == 1 :
             COLORS = "blue"
-            LABEL = "Adapted Feedback Linearization"
+            LABEL = r"Adapted Feedback Linearization: $\alpha$ = 1"
         elif alpha == 0 :
             COLORS = "red"
             LABEL = "Classic Feedback Lineariation"
         else :
             COLORS = "orange"
-            LABEL = "Adapting Feedback Linearization"
-        u = 1/K*M@(v-alpha*Fdot)-1/K*M@Minvdot@M@(np.array([x[2],x[5]])-alpha*F)+M@(np.array([x[2],x[5]])-alpha*F)+C+Bdyn@np.array([x[1],x[4]])+1/K*Cdot+1/K*Bdyn@np.array([x[2],x[5]])
+            LABEL = r"Adapting Feedback Linearization: $\alpha$ =  "+str(alpha)
+        u = 1/K*M@(v-alpha*Fdot)-1/K*M@Minvdot@M@(np.array([xhat[2],xhat[5]])-alpha*F)+M@(np.array([xhat[2],xhat[5]])-alpha*F)+C+Bdyn@np.array([xhat[1],xhat[4]])+1/K*Cdot+1/K*Bdyn@np.array([xhat[2],xhat[5]])
+        Command_Array[k,0,:] = u
+        Command_Array[k,1,:] = v
+
+        new_reelx[0:2] += dt*reelx[2:4]
+        #print("Start\n",new_reelx[2:4]-np.array([x[1],x[4]]),"\n")
+        new_reelx[2:4] += dt*(Minv@(reelx[4:6]-Bdyn@(reelx[2:4])-C)+F)  
+        #print(new_reelx[2:4]-np.array([(A@x+B@v)[1],(A@x+B@v)[4]]),"\n")
         new_reelx[4:6] += dt*K*(u-reelx[4:6])
+        #print("HERE: ",new_reelx,new_reelxhat)
             
         array_xhat[k+1] = xhat.flatten()
         array_x[k+1]= x.flatten()
         array_reelx[k+1] = new_reelx.flatten()
-        reelx = new_reelx 
+
+        
+
+        x_changevar[0],x_changevar[1],x_changevar[3],x_changevar[4] = new_reelx[0],new_reelx[2],new_reelx[1],new_reelx[3]
+        #print("Diff :",x-x_internalmodel,"\n")
+        x_changevar = x_changevar + B@v
+        Omega_sens,motor_noise,Omega_measure,measure_noise = Bruitage(Bruit,NbreVar,Noise_Variance)
+        x = A@x +B@v + motor_noise
+        #print(x-x_changevar)
+        #print("TEST: ",x-newx,"\n")
+        xhat = A@xhat+B@v
+
+        #print(x-newx)
+        #x+=motor_noise  
+        if DisplayNonlinear : y[k] = (H@x_changevar+measure_noise).flatten()
+        else : y[k] = (H@x+measure_noise).flatten() #For numerical errors, both lines computes same estimates up to numerical errors.
+        K = A@sigma@H.T@np.linalg.inv(H@sigma@H.T+Omega_measure)
+        sigma = Omega_sens + (A - K@H)@sigma@A.T
+        #print(y[k]-H@x_internalmodel)
+        xhat = xhat + K@(y[k]-H@xhat)
+        reelx = np.copy(new_reelx)
         #print(array_x[k-1,2],((array_x[k]-array_x[k-1])/dt)[1])   
 
 #Plot
+    
     x0 = xstart
-    reelx = array_reelx.T[:,1:][:,::1]
-    X = np.cos(reelx[0]+reelx[1])*33+np.cos(reelx[0])*30
-    Y = np.sin(reelx[0]+reelx[1])*33+np.sin(reelx[0])*30
-    if plot : 
-        plt.plot(X,Y,color = COLORS,label = LABEL)
+    if DisplayNonlinear : 
+        x[0],x[1],x[3],x[4] = new_reelx[0],new_reelx[2],new_reelx[1],new_reelx[3]
+        reelx = array_reelx.T[:,1:][:,::1]
+        X = np.cos(reelx[0]+reelx[1])*33+np.cos(reelx[0])*30
+        Y = np.sin(reelx[0]+reelx[1])*33+np.sin(reelx[0])*30
+    else : 
+        reelx = array_x.T[:,1:][:,::1]
+        X = np.cos(reelx[0]+reelx[3])*33+np.cos(reelx[0])*30
+        Y = np.sin(reelx[0]+reelx[3])*33+np.sin(reelx[0])*30
 
+    if plot : 
+        plt.grid(linestyle='--')
+        plt.axis("equal")
+        plt.plot(X,Y,color = COLORS,label = LABEL,linewidth = .8)
+        plt.xlabel("X [cm]")
+        plt.ylabel("Y [cm]")
+        plt.scatter([starting_point[0],targets[0]],[starting_point[1],targets[1]],color = "black")
+
+    #print("Optimum values " + str(J1)[:8]+" and "+str(J2)[:8])
     return X,Y
 
-def Simulation_FF_Linear(w1,w2,w3,w4,r1,r2,targets = [0,55],starting_point = [0,20],proportionnality = 0,pert = 0):
+def LQG_with_FF(w1,w2,w3,w4,r1,r2,targets = [0,55],starting_point = [0,30],proportionnality = 0,pert = 0,plot = True,NoiseVar = 1e-6):
 
     Num_iter = 600
     dt = 0.001
@@ -252,19 +302,21 @@ def Simulation_FF_Linear(w1,w2,w3,w4,r1,r2,targets = [0,55],starting_point = [0,
     sigma = np.identity(NbreVar)*10**-6 #Espérance de (erreur erreur^) avec erreur = x - xhat
     F = np.zeros(2)
     for k in range(Num_iter-1):
+        Omega_sens,motor_noise,Omega_measure,measure_noise = Bruitage(Bruit,NbreVar,NoiseVar)
         acc = np.array([(reelx[2]-array_reelx[k-1][2])/dt,(reelx[3]-array_reelx[k-1][3])/dt])
-        if pert == 0:
-            F =Compute_f_new_version(reelx[0:2],reelx[2:4],acc,proportionnality)
-        else: F = 0
+        if np.sin(reelx[0]+reelx[1])*33+np.sin(reelx[0])*30 > pert:
+            F = Compute_f_new_version(reelx[0:2],reelx[2:4],acc,proportionnality)
+        else : 
+            F = 0
         
 
-        x[0],x[1],x[3],x[4] = reelx[0],reelx[2],reelx[1],reelx[3]        
-        Omega_sens,motor_noise,Omega_measure,measure_noise = Bruitage(Bruit,NbreVar)
+        x[0],x[1],x[3],x[4],x[2],x[5] = reelx[0],reelx[2],reelx[1],reelx[3],reelx[4],reelx[5]
+        x = x+motor_noise        
+        
         y[k] = (H@x+measure_noise).flatten()
         K = A@sigma@H.T@np.linalg.inv(H@sigma@H.T+Omega_measure)
         sigma = Omega_sens + (A - K@H)@sigma@A.T
         xhat = A@xhat - B@L[k].reshape(np.flip(B.shape))@xhat + K@(y[k]-H@xhat)
-        x = A@x-B@L[k].reshape(np.flip(B.shape))@xhat+motor_noise
         u = -L[k].reshape(np.flip(B.shape))@xhat
             
         C = np.array([-reelx[3]*(2*reelx[2]+reelx[3])*a2*np.sin(reelx[1]),reelx[2]*reelx[2]*a2*np.sin(reelx[1])])
@@ -284,7 +336,7 @@ def Simulation_FF_Linear(w1,w2,w3,w4,r1,r2,targets = [0,55],starting_point = [0,
 #Plot
     x0 = xstart
     reelx = array_reelx.T[:,1:][:,::1]
-    plt.plot(np.cos(reelx[0]+reelx[1])*33+np.cos(reelx[0])*30,np.sin(reelx[0]+reelx[1])*33+np.sin(reelx[0])*30,color = "green",label = "Control of the Linear System")
+    if plot : plt.plot(np.cos(reelx[0]+reelx[1])*33+np.cos(reelx[0])*30,np.sin(reelx[0]+reelx[1])*33+np.sin(reelx[0])*30,color = "green",label = "Control of the Linear System")
 
 
 class InvalidTrial(Exception):
@@ -325,8 +377,10 @@ def Valid_Trial(data,trial):
 
 
     for u in data[trial]["EVENTS"][0,0][0][0]:
-
-        if u[0] == "success": return True
+        if u[0] == "success": 
+            if (np.max(data[trial]["Right_HandYVel"].flatten())*13-np.max((data[trial]["Right_Hand_ForceCMD_X"]).flatten()))>1: return False
+            
+            return True
     return False
 
 def Average_Curve(data,trial):
@@ -363,7 +417,7 @@ def Compute_Mean_Error():
     Total_Better_Array = np.zeros((TOTAL_SUBJ,250-length))
     for subj in range(1,TOTAL_SUBJ+1):
         data = loadmat("Data/XP1/F"+str(subj)+"_data.mat")["F"+str(subj)+"_data"][0]
-        X,Y = Simulation_FF(1e7,1e7,100,100,0,1e-6,1e-6,alpha = 1,starting_point= [0,9.4+DEVIATION],targets = [1,26.1+DEVIATION],proportionnality=OPTIMAL_FACTORS[subj-1],plot = False,pert = ONSET_PERTURBATION)
+        X,Y = Feedback_Linearization_with_FF(1e7,1e7,1e4,1e4,1e-6,1e-6,alpha = 1,starting_point= [0,9.4+DEVIATION],targets = [1,26.1+DEVIATION],proportionnality=OPTIMAL_FACTORS[subj-1],plot = False,pert = ONSET_PERTURBATION,DisplayNonlinear=True)
         x_interp = interp1d( Y,X)
         Y = np.linspace(9.5+DEVIATION,26+DEVIATION,100) 
         Xref = x_interp(Y)
@@ -384,7 +438,8 @@ def Compute_Alpha():
         data = loadmat("Data/XP1/F"+str(subj)+"_data.mat")["F"+str(subj)+"_data"][0]
         Big_X = np.zeros((101,100))
         for alpha in np.linspace(0,1,100):
-            X,Y = Simulation_FF(1e7,1e7,100,100,0,1e-6,1e-6,alpha = alpha,starting_point= [0,9.4+DEVIATION],targets = [1,26.1+DEVIATION],proportionnality=OPTIMAL_FACTORS[subj-1],plot = False,pert = ONSET_PERTURBATION)
+            
+            X,Y = Feedback_Linearization_with_FF(1e7,1e7,1e4,1e4,1e-6,1e-6,alpha = 1,starting_point= [0,9.4+DEVIATION],targets = [1,26.1+DEVIATION],proportionnality=OPTIMAL_FACTORS[subj-1],plot = False,pert = ONSET_PERTURBATION,DisplayNonlinear=True)
             x_interp = interp1d( Y,X)
             Y = np.linspace(9.5+DEVIATION,26+DEVIATION,100)
             Xref = x_interp(Y)
@@ -404,8 +459,8 @@ def Compute_Alpha():
         #Better_Error_Array = np.zeros(250-length)
         #Total_Better_Array[subj-1] = Better_Error_Array
     plt.plot(np.arange(0,250),np.nanmean(Alphas,axis = 0))
-    plt.xlabel = "Trials"
-    plt.ylabel = "Alpha"
+    plt.xlabel("Trials")
+    plt.ylabel("Alpha")
 def Optimal_Factors(ACTIVATION):
     if ACTIVATION :
         OPTIMAL_FACTORS = []
@@ -414,7 +469,7 @@ def Optimal_Factors(ACTIVATION):
             best_factor = -1
             data = loadmat("Data/XP1/F"+str(subj)+"_data.mat")["F"+str(subj)+"_data"][0]
             for factor in np.linspace(.1,.5,161):
-                X,Y = Simulation_FF(1e7,1e7,100,100,0,1e-6,1e-6,0,starting_point= [0,9.4+DEVIATION],targets = [1,26.1+DEVIATION],proportionnality=factor,plot = False,pert = ONSET_PERTURBATION)
+                X,Y = Feedback_Linearization_with_FF(1e7,1e7,1e4,1e4,1e-6,1e-6,alpha = 0,starting_point= [0,9.4+DEVIATION],targets = [1,26.1+DEVIATION],proportionnality=factor,plot = False,pert = ONSET_PERTURBATION,DisplayNonlinear=True)
                 x_interp = interp1d( Y,X)
                 Y = np.linspace(9.5+DEVIATION,26+DEVIATION,1000)
                 Xref = x_interp(Y)
@@ -446,21 +501,29 @@ def Resampling_Illustration():
     x_interp = interp1d( Y,X)
     Y = np.linspace(0.095,0.26,100)
     X = x_interp(Y) - x_interp(0.095)
-    plt.plot(data[trial]["Right_HandX"].flatten()*100- x_interp(0.095)*100,data[trial]["Right_HandY"].flatten()*100+20)
+    plt.plot(data[trial]["Right_HandX"].flatten()*100- x_interp(0.095)*100,data[trial]["Right_HandY"].flatten()*100+20,label = "Initial trajectory from the dataset")
 
 
     X,Y,t,thetas,thetae,load = preprocess(data,trial)
+    print(Y)
 
 
-    plt.plot(X,Y)
+    plt.plot(X,Y,label = "Preprocessed trajectory")
     plt.axis("equal")
-
-    ax = plt.gca()
-    ax.set_aspect('equal', adjustable='box')
             
-    plt.xlabel ="x [cm]"
-    plt.ylabel = "y [cm]"
+    plt.xlabel("x [cm]")
+    plt.ylabel("y [cm]")
     plt.grid()
+    plt.legend()
+    plt.plot(np.linspace(-1.25,1.25,100),np.ones(100)*27,color = "black")
+    plt.plot(np.linspace(-1.25,1.25,100),np.ones(100)*29.5,color = "black")
+    plt.plot(np.ones(100)*1.25,np.linspace(27,29.5,100),color = "black")
+    plt.plot(np.ones(100)*-1.25,np.linspace(27,29.5,100),color = "black",label = "Initial square")
+
+    plt.plot(np.linspace(-1.25,1.25,100),np.ones(100)*47,color = "black")
+    plt.plot(np.linspace(-1.25,1.25,100),np.ones(100)*49.5,color = "black")
+    plt.plot(np.ones(100)*1.25,np.linspace(47,49.5,100),color = "black")
+    plt.plot(np.ones(100)*-1.25,np.linspace(47,49.5,100),color = "black",label = "Initial square")
     #plt.xlim((-10,10))
 
 
@@ -564,7 +627,7 @@ def Simulation_FF_Adaptative(w1,w2,w3,w4,r1,r2,targets = [0,55],starting_point =
         else : 
             F = 0
         
-
+        
         x[0],x[1],x[3],x[4] = reelx[0],reelx[2],reelx[1],reelx[3]
         x[2] = acc[0]
         x[5] = acc[1]   
@@ -579,7 +642,7 @@ def Simulation_FF_Adaptative(w1,w2,w3,w4,r1,r2,targets = [0,55],starting_point =
         
         if adaptive : 
             v-= (theta.T@phi).reshape(2) 
-        Omega_sens,motor_noise,Omega_measure,measure_noise = Bruitage(Bruit,NbreVar)
+        Omega_sens,motor_noise,Omega_measure,measure_noise = Bruitage(Bruit,NbreVar,1e-12)
         y[k] = (H@x+measure_noise).flatten()
         K = A@sigma@H.T@np.linalg.inv(H@sigma@H.T+Omega_measure)
         sigma = Omega_sens + (A - K@H)@sigma@A.T

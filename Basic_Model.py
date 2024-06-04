@@ -78,17 +78,20 @@ def Compute_Command_NL(a,dottau):
     FMatrix =  np.array([[f1(a[0],Nf),0],[0,f1(a[1],Nf)]])
     GVector = np.array([[g(a[0],Nf)],[g(a[1],Nf)]])
     u = FinvMatrix @ (1/F *MmInv @ dottau.reshape((2,1)) - GVector)
-    newtau = Mm@(FMatrix@u+GVector)*F
-    if u[0] > a[0]: 
-        FinvMatrix[0,0] = 1/f2(a[0],Nf,u[0]) 
-        FMatrix[0,0] = f2(a[0],Nf,u[0]) 
-        GVector[0] = g2(a[0],Nf,u[0])
-    if u[1]>a[1]:
-        FinvMatrix[1,1] = 1/f2(a[1],Nf,u[1]) 
-        FMatrix[1,1] = f2(a[1],Nf,u[1]) 
-        GVector[1] = g2(a[1],Nf,u[1])
+
+    A = 1-np.exp(-(a/(0.56*Nf))**Nf)
+    newtau = Mm@(A)*F
+    
+    #if u[0] > a[0]: 
+    #    FinvMatrix[0,0] = 1/f2(a[0],Nf,u[0]) 
+    #    FMatrix[0,0] = f2(a[0],Nf,u[0]) 
+    #    GVector[0] = g2(a[0],Nf,u[0])
+    #if u[1]>a[1]:
+    #    FinvMatrix[1,1] = 1/f2(a[1],Nf,u[1]) 
+    #    FMatrix[1,1] = f2(a[1],Nf,u[1]) 
+    #    GVector[1] = g2(a[1],Nf,u[1])
     u = FinvMatrix @ (1/F *MmInv @ dottau.reshape((2,1)) - GVector)
-    return u.reshape(2),newtau.reshape(2)
+    return u.reshape(2),newtau
 
 def Compute_Command(dottau,M,x,C,B):
     u = dottau/K + M@np.array([x[2],x[5]]) + C + B@np.array([x[1],x[4]])
